@@ -1,4 +1,7 @@
 import pandas as pd
+import numpy as np
+import datetime
+
 
 def retorno(datos):
     """
@@ -26,8 +29,92 @@ def retorno(datos):
 
         contador += 1
 
-
     return retorno
+
+
+
+def normalizar(df):
+    """
+    Regresa un dataframe con los precios normalizados base 0
+
+    PARAMETROS
+    ------
+    df: DataFrame.  DataFrame con los datos a normalizar base 0
+    """
+
+    df = (df/df.iloc[0,:]) - 1
+    return df
+
+
+
+def precios(acciones='^MXX', fecha0=datetime.datetime.today().replace(month=1, day=1), fecha1=datetime.datetime.today()):
+    """
+    Regresa diferentes conjuntos de datos de precios según el tipo de entrada proporcionada.
+    Datos son obtenidos de Yahoo Finance
+
+    PARAMETROS
+    ------
+    acciones: str o list.  Default:  IPC (^MXX)
+                Si 'acciones' es str (ticker de una acción), la función regresa
+                un DataFrame con los precios de Apertura, Máximo, Mínimo, Cierre, Cierre Ajustado
+                y el Volumen de transacción para esa acción.
+    fecha1: Fecha inicial en formato "YYYY-MM-DD" u objeto datetime.datetime
+                Default:  Primer día del año
+    fecha2: Fecha final en formato "YYYY-MM-DD" u objeto datetime.datetime
+                Default:  Hoy
+
+    """
+
+    if type(fecha0) != datetime.datetime:
+        fecha0 = datetime.datetime.strptime(fecha0, "%Y-%m-%d")
+    # NOTA:  Con Windows OS, puede ser que tengas problemas al convertir el datetime object a segundos epoch
+    # Consulta la libreta de la Sesión 7 para mayor referencia
+    fecha0 = fecha0.strftime('%s')
+
+    if type(fecha1) != datetime.datetime:
+        fecha1 = datetime.datetime.strptime(fecha1, "%Y-%m-%d")
+    fecha1 = fecha1.strftime('%s')
+
+    # Recuerda que puedes definir una función adentro de otra función
+    def obtener_datos(accion):
+        nombres_columnas = {
+        'Date': 'fecha',
+        'Open': 'apertura',
+        'High': 'maximo',
+        'Low': 'minimo',
+        'Close': 'cierre',
+        'Adj Close': 'cierre_ajustado',
+        'Volume': 'volumen'
+        }
+
+        url = f'https://query1.finance.yahoo.com/v7/finance/download/{accion}?period1={fecha0}&period2={fecha1}&interval=1d&events=history&includeAdjustedClose=true'
+        df = pd.read_csv(url, parse_dates=True)
+        df.rename(columns=nombres_columnas, inplace=True)
+        df.set_index('fecha', inplace=True)
+        df.sort_index(inplace=True)
+        return df
+
+    if type(acciones) == str:
+        return obtener_datos(acciones)
+    else:
+        return pd.concat([obtener_datos(accion)['cierre_ajustado'].rename(accion.lower().replace('.mx', '')) for accion in acciones], axis=1)
+
+
+
+def ret_ln(pd_serie):
+    """
+    Regresa una serie con los retornos logaritmicos naturales
+
+    PARAMETROS
+    ----------
+    pd_serie:  pandas.core.series.Series.  Serie con los Datos
+                a calcular los retornos.
+    """
+
+    ret = np.log(pd_serie/pd_serie.shift(1))
+
+    return ret
+
 
 
 def ipc(formato_yf = True):
