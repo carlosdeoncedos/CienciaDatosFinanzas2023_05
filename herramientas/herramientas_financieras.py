@@ -141,11 +141,20 @@ def ipc(formato_yf = True):
     df['TICKER'] = df['TICKER'].str.replace('*', '')
     df['TICKER'] = df['TICKER'].str.replace(' ', '')
 
+
     if formato_yf == True:
         df['TICKER'] = df['TICKER'] + '.MX'
         lista = df['TICKER'].to_list()
-        lista.insert(0, '^MXX')
+        # Yahoo Finance no reporta los movimientos de AMXB y de Axtel (CTAXTELA.MX)
+        # Los eliminamos de la lista de yahoo
+        lista_eliminar = ['AMXB.MX', 'CTAXTELA.MX']
+        lista = [accion for accion in lista if accion not in lista_eliminar]
     else:
         lista = df['TICKER'].to_list()
+
+    lista.sort()
+    if formato_yf == True:
+        lista.insert(0, '^MXX')
+
 
     return lista
