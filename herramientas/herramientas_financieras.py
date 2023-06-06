@@ -90,8 +90,13 @@ def precios(acciones='^MXX', fecha0=datetime.datetime.today().replace(month=1, d
         url = f'https://query1.finance.yahoo.com/v7/finance/download/{accion}?period1={fecha0}&period2={fecha1}&interval=1d&events=history&includeAdjustedClose=true'
         df = pd.read_csv(url, parse_dates=True)
         df.rename(columns=nombres_columnas, inplace=True)
+        df['fecha'] = pd.to_datetime(df['fecha'])
         df.set_index('fecha', inplace=True)
         df.sort_index(inplace=True)
+        
+        anterior = df.loc[:'2023-03-10'].iloc[-2]
+        posterior = df.loc['2023-03-10':].iloc[1]
+        df.loc['2023-03-10'] = (anterior + posterior)/2
         return df
 
     if type(acciones) == str:
