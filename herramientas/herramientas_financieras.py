@@ -1,6 +1,8 @@
+from scipy.optimize import minimize
 import pandas as pd
 import numpy as np
 import datetime
+
 
 
 def retorno(datos):
@@ -93,7 +95,7 @@ def precios(acciones='^MXX', fecha0=datetime.datetime.today().replace(month=1, d
         df['fecha'] = pd.to_datetime(df['fecha'])
         df.set_index('fecha', inplace=True)
         df.sort_index(inplace=True)
-        
+
         anterior = df.loc[:'2023-03-10'].iloc[-2]
         posterior = df.loc['2023-03-10':].iloc[1]
         df.loc['2023-03-10'] = (anterior + posterior)/2
@@ -163,3 +165,170 @@ def ipc(formato_yf = True):
 
 
     return lista
+
+
+
+
+def portafolio_retorno(pesos_, retornos_):
+    """Al recibir los pesos y los retornos
+    de cada componente nos entrega, el retorno
+    del portafolio
+    """
+
+    return pesos_.T @ retornos_
+
+
+
+def portafolio_sigma(pesos_, matriz_cov_):
+    """Al recibir los pesos y la matriz de var-covar
+    de cada componente nos entrega, la sigma
+    del portafolio
+    """
+
+    varianza_portafolio_ = np.dot(pesos_.T,  np.dot(matriz_cov_, pesos_))
+    sigma_portafolio_ = np.sqrt(varianza_portafolio_) * np.sqrt(252)
+
+    return sigma_portafolio_
+
+
+
+
+def fe_2a(numero_puntos_, ret_, cov_, act_):
+    '''
+    Regresa una gráfica de la frontera eficiente
+    creada a patir de dos activos.
+
+    PARAMETROS
+    ----------
+    numero_puntos_:  Int.  El número de puntos o portafolios
+    ret_:  list.  Lista con los retornos ANUALES de cada activos.
+    cov_:  pandas.dataframe.  Matriz de Var-Cov entre los dos activos.
+    act_:  list.  Lista con los nombres de los dos activos.
+
+
+    CAMBIOS RESPECTO A LA FUNCION VISTA EN LA SESION 9
+    --------------------------------------------------
+    1. Eliminé el volver a calcular la matriz de cov entre los dos activos
+       (w, cov_.cov()) ---> (w, cov_), al calcular la variable "volatilidad_2a_"
+    2. Eliminé el 'reuso' del parámetro 'act_' ya que al momento de dar los
+       parámetros de alta ya van filtrados por los dos activos, están de más
+       ejem: ret_[act_] ---> ret_
+    3. Desarrollé a mayor detalle el docstring de la función
+    4. Incluí f-string en el título para usar el parámetro act_ que contiene la
+       lista con los nombres de los dos activos y los transformo a mayúsculas.
+    '''
+
+    pesos_ = [np.array([w, 1-w]) for w in np.linspace(0,1, numero_puntos_)]
+    retornos_2a_ = [portafolio_retorno(w, ret_) for w in pesos_]
+    volatilidad_2a_ = [portafolio_sigma(w, cov_) for w in pesos_]
+
+    frontera_eficiente_ = pd.DataFrame({'R':retornos_2a_, 'Sigma':volatilidad_2a_})
+
+    fig_ = frontera_eficiente_.plot.line(x='Sigma', y='R', figsize=(12,8),style='.-', title=f'Frontera Eficiente entre los activos "{act_[0].upper()}" y "{act_[1].upper()}"')
+
+    return fig_
+
+
+
+
+def minimizar_volatilidad(retorno_objetivo, ret_, cov_):
+    """
+    Dado un retorno objetivo, entregar los pesos de los activos
+    """
+
+    #Encontrar el número de activos entregados
+    n = len(ret_.index)
+
+    """
+    Los inputs que requiere el optimizador son
+    * Función objetivo
+    * Restricciones
+    * Puntos de partida inicial
+    """
+
+    #Definir pesos iniciales:
+    pesos_iniciales = np.repeat(1/n, n)
+
+    #Restricciones:
+    #Rango de pesos <= 1
+    limites = ((0.0, 1.0),) * n
+
+    # La suma de los pesos = 1
+    pesos_igual_uno = {
+        'type': 'eq',
+        'fun': lambda pesos: np.sum(pesos) - 1
+    }
+
+    #Forzar que el retorno = retorno objetivo
+    retorno_igual_objetivo = {
+        'type': 'eq',
+        'args': (ret_, ),
+        'fun': lambda pesos, er: retorno_objetivo - portafolio_retorno(pesos, ret_)
+    }
+
+    #Definir el optimizador (función objetivo):
+    pesos = minimize(portafolio_sigma,
+                     pesos_iniciales,
+                     args=(cov_,), method='SLSQP',
+                     options={'disp': False},
+                     constraints= (retorno_igual_objetivo, pesos_igual_uno),
+                     bounds= limites
+                    )
+
+
+    return pesos.x
+
+
+
+
+def pesos_optimos(n_puntos, ret_, cov_):
+
+    """
+    Entrega los w  de los portafolios generados
+    """
+
+    #1. Definir los retornos esperados
+    retorno_objetivos_ = np.linspace(ret_.min(), ret_.max(), n_puntos)
+
+
+    #2. Encontrar los w optimizados para cada retorno esperado:
+    pesos_ = [minimizar_volatilidad(retorno_objetivo_, ret_, cov_) for retorno_objetivo_ in retorno_objetivos_]
+
+    return pesos_
+
+
+
+
+def fe_na(n_puntos_, ret_, cov_):
+    '''
+    Regresa una gráfica de la frontera eficiente
+    creada a patir de dos activos.
+
+    PARAMETROS
+    ----------
+    numero_puntos_:  Int.  El número de puntos o portafolios
+    ret_:  list.  Lista con los retornos ANUALES de cada activos.
+    cov_:  pandas.dataframe.  Matriz de Var-Cov entre los dos activos.
+
+    CAMBIOS RESPECTO A LA FUNCION VISTA EN LA SESION 9
+    --------------------------------------------------
+    1. Eliminé el volver a calcular la matriz de cov entre los dos activos
+    2. Eliminé el 'reuso' del parámetro 'activos' que lo estaba utilizando de
+       la variable global del código, por que no tiene ese parámetro
+    3. En la clase no utilicé los parámetros de la función para calcular
+       los retornos y la volatilidad.  Utilicé las variables globales
+       "retornos_anuales" y "retornos".  Los cambié por los parámetros de la
+       función "ret_" y "cov_"
+    3. Desarrollé a mayor detalle el docstring de la función
+    4. Cambié el nombre de la función de "fe_n" a "fe_na"
+    '''
+    num_activos_ = len(ret_)
+    pesos_ = pesos_optimos(n_puntos_, ret_, cov_)
+    retornos_ = [portafolio_retorno(w, ret_) for w in pesos_]
+    volatilidad_ = [portafolio_sigma(w, cov_) for w in pesos_]
+
+    frontera_eficiente_ = pd.DataFrame({'R':retornos_, 'Sigma':volatilidad_})
+
+    fig_ = frontera_eficiente_.plot.line(x='Sigma', y='R', figsize=(12,8), style='.-', title=f'Frontera Eficiente entre {num_activos_} activos')
+
+    return fig_
